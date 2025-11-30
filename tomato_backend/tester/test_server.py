@@ -1,7 +1,7 @@
 import requests
 
 # Ganti dengan nama file gambar tomat sembarang yang ada di laptopmu untuk tes
-GAMBAR_TES = "tester/test_pictures/orange1.jpeg" 
+GAMBAR_TES = "test_pictures/green1.jpeg" 
 URL = "http://127.0.0.1:5000/predict"
 
 try:

@@ -2,10 +2,10 @@ import flask
 from flask import request, jsonify
 import numpy as np
 import cv2
-import tensorflow as tf
-import json
+import joblib 
 import os
 import logging
+import math
 
 # --- SETUP LOGGING ---
 logging.basicConfig(level=logging.INFO)
@@ -13,149 +13,118 @@ logger = logging.getLogger("TomatoServer")
 
 app = flask.Flask(__name__)
 
-# --- KONFIGURASI PATH (DISESUAIKAN DENGAN STRUKTUR FOLDER ANDA) ---
-# Menggunakan os.path.join agar kompatibel dengan Windows/Linux
+# --- CONFIG ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, 'assets', 'tomato_model_2output.tflite')
-SCALER_PATH = os.path.join(BASE_DIR, 'assets', 'scaler_params.json')
+MODEL_PATH = os.path.join(BASE_DIR, 'assets', 'model_jst.pkl')
+SCALER_PATH = os.path.join(BASE_DIR, 'assets', 'scaler_jst.pkl')
 
-# --- 1. LOAD MODEL TFLITE ---
-logger.info(f"Mencoba memuat model dari: {MODEL_PATH}")
+model = None
+scaler = None
+
 try:
-    if not os.path.exists(MODEL_PATH):
-        raise FileNotFoundError(f"File model tidak ditemukan di {MODEL_PATH}")
-
-    interpreter = tf.lite.Interpreter(model_path=MODEL_PATH)
-    interpreter.allocate_tensors()
-    input_details = interpreter.get_input_details()
-    output_details = interpreter.get_output_details()
-    logger.info("✅ Model berhasil dimuat!")
+    if os.path.exists(MODEL_PATH) and os.path.exists(SCALER_PATH):
+        model = joblib.load(MODEL_PATH)
+        scaler = joblib.load(SCALER_PATH)
+        logger.info("✅ Model JST (Normalized) Dimuat!")
+    else:
+        logger.error("❌ Model tidak ditemukan.")
 except Exception as e:
-    logger.error(f"❌ GAGAL MEMUAT MODEL: {e}")
-    exit() # Matikan server jika model vital tidak ada
+    logger.error(f"❌ Error loading: {e}")
 
-# --- 2. LOAD SCALER ---
-logger.info(f"Mencoba memuat scaler dari: {SCALER_PATH}")
-scaler_mean = [0]*6
-scaler_scale = [1]*6
+# --- FUNGSI METRIK FISIK (Bentuk & Tekstur) ---
+# Fungsi ini TETAP ADA untuk menghitung skor detail di frontend
+def calculate_metrics(image):
+    # 1. Analisis Bentuk (Circularity)
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    blur = cv2.GaussianBlur(gray, (5, 5), 0)
+    _, thresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    shape_score = 85 
+    if contours:
+        c = max(contours, key=cv2.contourArea)
+        area = cv2.contourArea(c)
+        perimeter = cv2.arcLength(c, True)
+        if perimeter > 0:
+            circularity = (4 * math.pi * area) / (perimeter ** 2)
+            shape_score = min(circularity * 100 + 10, 100)
 
-if os.path.exists(SCALER_PATH):
-    try:
-        with open(SCALER_PATH, 'r') as f:
-            data = json.load(f)
-            scaler_mean = data.get('mean', [0]*6)
-            scaler_scale = data.get('scale', [1]*6)
-        logger.info("✅ Scaler berhasil dimuat.")
-    except Exception as e:
-        logger.warning(f"⚠️ Gagal baca scaler json: {e}, menggunakan default.")
-else:
-    logger.warning("⚠️ File scaler_params.json tidak ditemukan! Menggunakan default (0,1).")
+    # 2. Analisis Tekstur (Skin Smoothness)
+    # Menggunakan standar deviasi warna. Semakin kecil std, semakin mulus.
+    (mean, std) = cv2.meanStdDev(image)
+    avg_std = np.mean(std)
+    # Rumus pendekatan skor tekstur (0-100)
+    texture_score = max(0, min(100, 100 - (avg_std * 1.5))) 
 
-@app.route('/', methods=['GET'])
-def index():
-    return jsonify({
-        "status": "online",
-        "message": "Server Tomat Siap",
-        "structure": "Assets Folder Mode"
-    })
+    return int(shape_score), int(texture_score)
 
 @app.route('/predict', methods=['POST'])
 def predict():
-    if 'image' not in request.files:
-        return jsonify({"error": "Tidak ada file gambar yang diupload"}), 400
+    if 'image' not in request.files: return jsonify({"error": "No image"}), 400
+    if model is None: return jsonify({"error": "Model not ready"}), 500
 
     try:
-        # --- A. BACA GAMBAR (OpenCV default BGR) ---
         file = request.files['image']
         img_bytes = np.frombuffer(file.read(), np.uint8)
         img_bgr = cv2.imdecode(img_bytes, cv2.IMREAD_COLOR)
 
-        if img_bgr is None:
-            return jsonify({"error": "File rusak atau bukan gambar"}), 400
+        if img_bgr is None: return jsonify({"error": "File rusak"}), 400
 
-        # --- B. PREPROCESSING ---
-        # 1. Resize
-        img_resized_bgr = cv2.resize(img_bgr, (128, 128))
+        # --- PREPROCESSING (NORMALISASI) ---
+        img_resized = cv2.resize(img_bgr, (100, 100))
+        mean_bgr = np.mean(img_resized, axis=(0, 1))
         
-        # ### PERUBAHAN PENTING: KONVERSI KE RGB UNTUK AI ###
-        # AI butuh RGB, tapi Hue butuh BGR. Jadi kita buat variabel terpisah.
-        img_resized_rgb = cv2.cvtColor(img_resized_bgr, cv2.COLOR_BGR2RGB)
+        r, g, b = mean_bgr[2], mean_bgr[1], mean_bgr[0]
+        total = r + g + b
+        if total == 0: total = 1
         
-        # 2. Normalisasi Gambar [-1, 1] (Gunakan yang RGB!)
-        img_norm = (img_resized_rgb.astype(np.float32) / 127.5) - 1.0
-        input_img = np.expand_dims(img_norm, axis=0) # [1, 128, 128, 3]
-
-        # 3. Ekstraksi Fitur Numerik (Gunakan RGB agar tidak tertukar)
-        # Di array numpy RGB: Channel 0=R, 1=G, 2=B
-        mean_r = np.mean(img_resized_rgb[:,:,0])
-        mean_g = np.mean(img_resized_rgb[:,:,1])
-        mean_b = np.mean(img_resized_rgb[:,:,2])
+        # Hitung Persentase Warna (Normalized RGB)
+        norm_r = r / total
+        norm_g = g / total
+        norm_b = b / total
         
-        features = [mean_r, mean_g, mean_b, 15.0, 120.0, 11304.0]
+        # Input ke Model
+        input_features = np.array([[norm_r, norm_g, norm_b]])
+        input_scaled = scaler.transform(input_features)
+
+        # --- PREDIKSI (FULL AI / JST ONLY) ---
+        # Kita HAPUS logika Hue Rules di sini sesuai permintaan
+        probabilities = model.predict_proba(input_scaled)[0]
         
-        # 4. Scaling Fitur Numerik
-        scaled_features = []
-        for i, val in enumerate(features):
-            scale = scaler_scale[i] if scaler_scale[i] != 0 else 1.0
-            scaled_features.append((val - scaler_mean[i]) / scale)
+        # Ambil kelas dengan probabilitas tertinggi
+        pred_idx = np.argmax(probabilities)
+        confidence = probabilities[pred_idx] * 100
+
+        labels = ["UNRIPE", "TURNING", "RIPE"]
+        colors = ["green", "orange", "red"]
         
-        input_num = np.array([scaled_features], dtype=np.float32)
+        final_label = labels[pred_idx]
+        final_color = colors[pred_idx]
 
-        # --- C. INFERENCE MODEL ---
-        for detail in input_details:
-            shape = detail['shape']
-            if shape[-1] == 6:
-                interpreter.set_tensor(detail['index'], input_num)
-            elif len(shape) == 4:
-                interpreter.set_tensor(detail['index'], input_img)
+        # --- HITUNG METRIK FISIK (BENTUK & TEKSTUR) ---
+        shape, texture = calculate_metrics(img_bgr)
 
-        interpreter.invoke()
-
-        # --- D. HASIL AI ---
-        probs = interpreter.get_tensor(output_details[0]['index'])[0]
-        prob_ripe = float(probs[0])
-        prob_turn = float(probs[1])
-        prob_unr = float(probs[2])
-
-        # --- E. LOGIKA HUE (TETAP PAKAI BGR) ---
-        # OpenCV butuh BGR untuk convert ke HSV dengan benar
-        hsv = cv2.cvtColor(img_resized_bgr, cv2.COLOR_BGR2HSV)
-        mean_hue = np.mean(hsv[:,:,0]) 
-
-        label = "UNKNOWN"
-        color_code = "grey"
-
-        # Aturan Hue
-        if mean_hue < 17.0:
-            label = "UNRIPE"
-            color_code = "green"
-        elif 17.0 <= mean_hue <= 27.0:
-            label = "TURNING"
-            color_code = "orange"
-        else:
-            label = "RIPE"
-            color_code = "red"
-
-        # --- F. RESPONSE ---
+        # Response
+        debug_str = f"R:{norm_r:.2f} G:{norm_g:.2f} B:{norm_b:.2f}"
+        
         response = {
-            "label": label,
-            "color_status": color_code,
-            "confidence": "Hue Rules", 
-            "debug_info": (
-                f"Hue: {mean_hue:.1f} | "
-                f"AI: R{prob_ripe:.2f} T{prob_turn:.2f} U{prob_unr:.2f}"
-            )
+            "label": final_label,
+            "color_status": final_color,
+            "confidence": f"{int(confidence)}%",
+            "details": {
+                "color_score": int(confidence), # Keyakinan AI terhadap warna
+                "shape_score": shape,           # Hasil perhitungan OpenCV
+                "texture_score": texture        # Hasil perhitungan OpenCV
+            },
+            "debug_info": f"NormRGB: {debug_str} | AI: {final_label}"
         }
         
-        logger.info(f"Sukses Deteksi: {label} (Hue: {mean_hue:.1f})")
+        logger.info(f"Hasil: {final_label} ({int(confidence)}%) - {debug_str} - Tex: {texture}")
         return jsonify(response)
 
     except Exception as e:
-        logger.error(f"Error Processing: {e}")
-        return jsonify({"error": str(e), "label": "ERROR", "color_status": "purple"}), 500
+        logger.error(f"Error: {e}")
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    # Menjalankan Server
-    print("\n--- SERVER SIAP ---")
-    print("Menunggu request dari Flutter...")
     app.run(host='0.0.0.0', port=5000, debug=True)
