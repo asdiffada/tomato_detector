@@ -1,85 +1,95 @@
-# Tomato Maturity Detection App (Hybrid AI + Hue Rules)
-A mobile application based on Flutter integrated with a Python (Flask) backend to detect the maturity level of tomatoes. This system employs a Hybrid approach combining Artificial Intelligence (TFLite) with Digital Image Processing rules (Hue Thresholding) for accurate results.
+# Tomato Detector - Intelligent Ripeness Detection
+Tomato Detector is an Artificial Intelligence (AI) based mobile application designed to detect tomato ripeness levels accurately and in real-time.
+
+This system employs a Computer Vision and Artificial Neural Network (ANN) approach using Normalized RGB feature extraction. It is capable of distinguishing tomatoes into three categories: Unripe, Turning, and Ripe, as well as analyzing physical quality metrics such as shape and texture.
 
 ## Key Features
-- Real-time Detection: Distinguishes between Unripe, Turning, and Ripe tomatoes.
-- Hybrid Logic: Uses AI for feature extraction and Hue Value for final decision rules.
-- Dual Mode: Supports image input directly from the Camera or from the Gallery.
-- Informative Dashboard: Provides educational information regarding the characteristics of each tomato maturity phase.
-- Separate Backend: Lightweight and modular Python Flask server.
+Dual Input Mode: Supports detection directly via the camera (Embedded Camera) or by uploading images from the gallery.
+Advanced AI Analysis: Utilizes the Multi-Layer Perceptron (MLP) algorithm trained on the Fruit-360 dataset with color normalization techniques for high accuracy across various lighting conditions.
+Detailed Analysis: Provides detailed scores regarding Color Confidence, Shape (Circularity), and Skin Texture (Smoothness).
+Smart Dashboard: Visualizes daily scanning statistics and ripeness distribution charts.
+History & Tracking: Saves a complete scan history with timestamps and analysis results.
+Education: A "Discover" feature containing cultivation guides, storage tips, and articles related to tomatoes connected to trusted sources.
+
+## Tech Stack
+Frontend (Mobile App)
+Framework: Flutter (Dart)
+State Management: setState & Service Singleton pattern
+Networking: http package
+Camera: camera & image_picker plugins
+UI/UX: Material Design 3, Custom Painters (Charts), Responsive Layout
+Backend (API Server)
+Framework: Flask (Python)
+Machine Learning: Scikit-Learn (MLPClassifier)
+Image Processing: OpenCV (Feature Extraction, Contours, Histograms)
+Data Handling: NumPy, Joblib
 
 ## Project Structure
-tomato_apk/
-├── tomato_backend/          # Server Side (Python)
-│   ├── assets/              # TFLite Model & Scaler JSON
+ProjectTomat/
+├── tomato_backend/          # Server Side (Python AI)
+│   ├── assets/              # Stores models (.pkl) and scalers
+│   ├── dataset/             # (Optional) Training image data
 │   ├── venv/                # Virtual Environment
-│   ├── app.py               # Main Flask Server Code
-│   └── requirements.txt     # Python Libraries List
+│   ├── app.py               # Flask server entry point
+│   ├── train_jst.py         # ANN model training script
+│   └── requirements.txt     # Python Dependencies
 │
-├── tomato_frontend/         # App Side (Flutter)
+├── tomato_frontend/         # Application Side (Flutter)
 │   ├── lib/
-│   │   ├── api_service.dart # IP Config & HTTP Requests
-│   │   ├── dashboard_page.dart # Main Page
-│   │   ├── camera_page.dart # Camera Page Logic
-│   │   ├── gallery_page.dart # Gallery Page Logic
-│   │   ├── widgets.dart     # UI Components (Sidebar, Result)
-│   │   └── main.dart        # App Entry Point
+│   │   ├── api_service.dart # HTTP Request Logic
+│   │   ├── history_service.dart # Local Data Management
+│   │   ├── widgets.dart     # UI Components (Sidebar, etc.)
+│   │   ├── *_page.dart      # Pages (Home, Scan, Analysis, etc.)
+│   │   └── main.dart        # Application entry point
 │   └── pubspec.yaml         # Flutter Dependencies
 │
 └── README.md                # Project Documentation
 
-## Installation & Run Guide (Backend)
-The backend is responsible for processing images using Python.
-1. Environment Setup
-Ensure you have Python 3.10 - 3.12 installed.
+
+## Installation & Setup Guide
+Prerequisites
+Python (v3.10 or latest)
+Flutter SDK (v3.0 or latest)
+USB Cable (For debugging on an Android device)
+
+1. Setup Backend (Server)
+Navigate to the backend folder
 cd tomato_backend
 Create Virtual Environment
 python -m venv venv
-Activate Venv (Windows)
+Activate Venv
+Windows:
 venv\Scripts\activate
-Activate Venv (Mac/Linux)
+Mac/Linux:
 source venv/bin/activate
-
-2. Install Libraries
+Install Libraries
 pip install -r requirements.txt
-Note: If using Python 3.12, ensure setuptools is installed.
-
-3. Run Server
+(Optional) Retrain the JST Model
+python train_jst.py
+Run Server
 python app.py
-If successful, the terminal will display:
-    Running on http://0.0.0.0:5000
+The server will run at http://0.0.0.0:5000
 
-## Installation & Run Guide (Frontend)
-The frontend is the mobile application installed on the Android device.
-1. Flutter Setup
-Ensure Flutter SDK is installed and detected (flutter doctor).
-2. IP Address Configuration (IMPORTANT!)
-For the phone to connect to the Laptop, you must configure the server IP Address.
-Check your Laptop IP:
-Windows: Open CMD, type ipconfig. Look for "IPv4 Address" on the Wi-Fi adapter (e.g., 192.168.1.13).
-Open the file tomato_frontend/lib/api_service.dart.
-Update the SERVER_URL variable:
-final String SERVER_URL = "[http://192.168.1.13:5000/predict](http://192.168.1.13:5000/predict)";
-3. Install Dependencies
+2. Setup Frontend (Application)
+- Configure IP Address:
+Check your Laptop's IP (Windows: ipconfig, Mac/Linux: ifconfig).
+Open tomato_frontend/lib/api_service.dart.
+Update SERVER_URL to match your Laptop's IP:
+final String SERVER_URL = "[http://192.168.1.](http://192.168.1.)X:5000/predict";
+- Run Application:
+Navigate to the frontend folder
 cd tomato_frontend
+Download dependencies
 flutter pub get
-4. Run Application
-Connect your Android phone via USB (enable USB Debugging) and ensure both the Phone & Laptop are connected to the same Wi-Fi.
+Run on Device
 flutter run
 
-## Technologies Used
-Frontend: Flutter (Dart), HTTP, Image Picker.
-Backend: Python, Flask.
-AI/ML: TensorFlow Lite, NumPy.
-Computer Vision: OpenCV (for BGR/RGB/HSV color conversion).
+## AI Methodology (ANN)
+This system does not use a conventional Convolutional Neural Network (CNN). Instead, it adopts an Average Color Value Analysis method, which is efficient and aligns with specific literature references:
+- Preprocessing: Image is resized to 100x100 pixels.
+- Feature Extraction: Calculates the average Red, Green, and Blue values of all pixels.
+- Normalization: Converts absolute values into proportions ($R / (R+G+B)$) to handle lighting variations (bright/dark).
+- Classification: Normalized data is fed into a Multi-Layer Perceptron (MLP) to determine - class probabilities (Unripe/Turning/Ripe).
+- Quality Check: Uses OpenCV to mathematically calculate Circularity and Skin Smoothness (Standard Deviation).
 
-## Common Troubleshooting
-- Error: Connection Timed Out / Connection Failed
-- Ensure the Python Server (app.py) is running.
-- Ensure the Phone and Laptop are on the same Wi-Fi network.
-- Check if the IP in api_service.dart is correct.
-- Temporarily disable Windows Firewall if it blocks the connection.
-- Error: ModuleNotFoundError 'distutils' (Python 3.12)
-- Ensure the setuptools library is installed: pip install setuptools.
-
-Created for Final Project purposes.
+This project is created for Final Project purposes.

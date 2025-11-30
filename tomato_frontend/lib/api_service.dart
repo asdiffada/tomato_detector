@@ -5,7 +5,7 @@ import 'package:http/http.dart' as http;
 
 // --- KONFIGURASI SERVER ---
 // GANTI IP INI SESUAI IP LAPTOP ANDA
-final String SERVER_URL = "http://192.168.1.10:5000/predict"; 
+final String SERVER_URL = "http://192.168.3.63:5000/predict"; 
 
 class ApiService {
   // Fungsi untuk upload gambar ke server
