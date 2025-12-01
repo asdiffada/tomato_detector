@@ -48,8 +48,8 @@ ProjectTomat/
 
 ## Installation & Setup Guide
 Prerequisites
-Python (v3.10 or latest)
-Flutter SDK (v3.0 or latest)
+Python (v3.12)
+Flutter SDK (v3.0)
 USB Cable (For debugging on an Android device)
 
 1. Setup Backend (Server)
