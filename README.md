@@ -4,12 +4,12 @@ Tomato Detector is an Artificial Intelligence (AI) based mobile application desi
 This system employs a Computer Vision and Artificial Neural Network (ANN) approach using Normalized RGB feature extraction. It is capable of distinguishing tomatoes into three categories: Unripe, Turning, and Ripe, as well as analyzing physical quality metrics such as shape and texture.
 
 ## Key Features
-Dual Input Mode: Supports detection directly via the camera (Embedded Camera) or by uploading images from the gallery.
-Advanced AI Analysis: Utilizes the Multi-Layer Perceptron (MLP) algorithm trained on the Fruit-360 dataset with color normalization techniques for high accuracy across various lighting conditions.
-Detailed Analysis: Provides detailed scores regarding Color Confidence, Shape (Circularity), and Skin Texture (Smoothness).
-Smart Dashboard: Visualizes daily scanning statistics and ripeness distribution charts.
-History & Tracking: Saves a complete scan history with timestamps and analysis results.
-Education: A "Discover" feature containing cultivation guides, storage tips, and articles related to tomatoes connected to trusted sources.
+- Dual Input Mode: Supports detection directly via the camera (Embedded Camera) or by uploading images from the gallery.
+- Advanced AI Analysis: Utilizes the Multi-Layer Perceptron (MLP) algorithm trained on the Fruit-360 dataset with color normalization techniques for high accuracy across various lighting conditions.
+- Detailed Analysis: Provides detailed scores regarding Color Confidence, Shape (Circularity), and Skin Texture (Smoothness).
+- Smart Dashboard: Visualizes daily scanning statistics and ripeness distribution charts.
+- History & Tracking: Saves a complete scan history with timestamps and analysis results.
+- Education: A "Discover" feature containing cultivation guides, storage tips, and articles related to tomatoes connected to trusted sources.
 
 ## Tech Stack
 Frontend (Mobile App)
@@ -48,8 +48,8 @@ ProjectTomat/
 
 ## Installation & Setup Guide
 Prerequisites
-Python (v3.10 or latest)
-Flutter SDK (v3.0 or latest)
+Python (v3.12)
+Flutter SDK (v3.0)
 USB Cable (For debugging on an Android device)
 
 1. Setup Backend (Server)
