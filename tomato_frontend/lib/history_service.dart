@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/material.dart';
 
 class ScanResult {
   final File image;
@@ -8,10 +9,13 @@ class ScanResult {
   final String colorStatus;
   final DateTime timestamp;
   
-  // --- Field Baru untuk Analisis Detail ---
   final int colorScore;
   final int shapeScore;
   final int textureScore;
+  final int sizeMm;
+  
+  // --- Field Baru: Kualitas ---
+  final String quality; 
 
   ScanResult({
     required this.image,
@@ -20,19 +24,24 @@ class ScanResult {
     required this.debugInfo,
     required this.colorStatus,
     required this.timestamp,
-    // Default value 0 jika data lama tidak punya field ini
     this.colorScore = 0,
     this.shapeScore = 0,
     this.textureScore = 0,
+    this.sizeMm = 0,
+    this.quality = "Unknown", // Default
   });
 }
 
 class HistoryService {
-  static List<ScanResult> history = [];
+  static final ValueNotifier<List<ScanResult>> historyNotifier = ValueNotifier([]);
+  static List<ScanResult> get history => historyNotifier.value;
   static ScanResult? latestResult;
 
   static void addResult(ScanResult result) {
-    history.insert(0, result);
+    final currentList = historyNotifier.value;
+    final newList = List<ScanResult>.from(currentList);
+    newList.insert(0, result);
+    historyNotifier.value = newList;
     latestResult = result;
   }
 }

@@ -40,7 +40,6 @@ class _ScanPageState extends State<ScanPage> with WidgetsBindingObserver {
   @override
   void didUpdateWidget(ScanPage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Logic pintar: Matikan kamera jika pindah tab, nyalakan jika kembali
     if (widget.isActive != oldWidget.isActive) {
       if (widget.isActive) {
         _initCamera();
@@ -65,7 +64,6 @@ class _ScanPageState extends State<ScanPage> with WidgetsBindingObserver {
     try {
       _cameras = await availableCameras();
       if (_cameras != null && _cameras!.isNotEmpty) {
-        // Cari kamera belakang (utama)
         final camera = _cameras!.firstWhere(
           (cam) => cam.lensDirection == CameraLensDirection.back,
           orElse: () => _cameras!.first,
@@ -143,7 +141,6 @@ class _ScanPageState extends State<ScanPage> with WidgetsBindingObserver {
     try {
       final XFile imageFile = await _controller!.takePicture();
       
-      // Matikan flash otomatis setelah foto (jika mode torch)
       if (_flashMode == FlashMode.torch) {
         await _controller!.setFlashMode(FlashMode.off);
         setState(() => _flashMode = FlashMode.off);
@@ -168,16 +165,16 @@ class _ScanPageState extends State<ScanPage> with WidgetsBindingObserver {
 
   Future<void> _processFile(File image) async {
     try {
-      // 1. Upload ke API
       var apiResult = await ApiService.uploadImage(image);
 
-      // 2. Ambil detail analisis (jika ada dari backend)
       var details = apiResult['details'] ?? {};
       int colorScore = details['color_score'] ?? 0;
       int shapeScore = details['shape_score'] ?? 0;
       int textureScore = details['texture_score'] ?? 0;
+      int sizeMm = details['size_mm'] ?? 0; 
 
-      // 3. Simpan ke History Service
+      String quality = details['quality'] ?? "Good"; 
+
       var newScan = ScanResult(
         image: image,
         label: apiResult['label'] ?? "Error",
@@ -185,17 +182,17 @@ class _ScanPageState extends State<ScanPage> with WidgetsBindingObserver {
         debugInfo: apiResult['debug_info'] ?? "-",
         colorStatus: apiResult['color_status'] ?? "grey",
         timestamp: DateTime.now(),
-        // Data detail baru
         colorScore: colorScore,
         shapeScore: shapeScore,
         textureScore: textureScore,
+        sizeMm: sizeMm, 
+        quality: quality,
       );
       
       HistoryService.addResult(newScan);
 
       if (mounted) {
         setState(() => _isLoading = false);
-        // 4. Pindah ke Tab Analysis (Index 1)
         widget.onTabChange(1);
       }
     } catch (e) {
@@ -214,7 +211,6 @@ class _ScanPageState extends State<ScanPage> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    // Tampilan Loading Overlay
     if (_isLoading) {
       return const Scaffold(
         backgroundColor: Colors.white,
@@ -238,7 +234,6 @@ class _ScanPageState extends State<ScanPage> with WidgetsBindingObserver {
         backgroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
-        // Custom Leading (Sidebar Button)
         leading: Builder(
           builder: (context) {
             return InkWell(
@@ -257,7 +252,7 @@ class _ScanPageState extends State<ScanPage> with WidgetsBindingObserver {
           }
         ),
         title: const Text(
-          "Scan",
+          "Scan Tomat",
           style: TextStyle(color: Color(0xFFFF3B30), fontWeight: FontWeight.bold),
         ),
       ),
@@ -275,18 +270,44 @@ class _ScanPageState extends State<ScanPage> with WidgetsBindingObserver {
                   BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 5))
                 ],
               ),
+              // Clip agar sudut membulat
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(20),
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    // Preview Kamera
+                    // PERBAIKAN DISTORSI KAMERA
                     if (_isCameraInitialized && _controller != null)
-                      CameraPreview(_controller!)
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          return OverflowBox(
+                            maxWidth: double.infinity,
+                            maxHeight: double.infinity,
+                            child: SizedBox(
+                              width: constraints.maxWidth,
+                              height: constraints.maxWidth * _controller!.value.aspectRatio,
+                              child: CameraPreview(_controller!),
+                            ),
+                          );
+                        },
+                      )
                     else
                       const Center(child: CircularProgressIndicator(color: Colors.white)),
 
-                    // Frame Pojok (Tanpa tombol switch)
+                    // BOX PANDUAN UKURAN (Fixed Distance Method)
+                    // Box ini membantu user memposisikan tomat agar ukurannya konsisten
+                    Center(
+                      child: Container(
+                        width: 250, // Lebar fixed box
+                        height: 250, // Tinggi fixed box
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.white.withOpacity(0.5), width: 2, style: BorderStyle.solid),
+                          borderRadius: BorderRadius.circular(12)
+                        ),
+                      ),
+                    ),
+
+                    // Frame Pojok Merah
                     Positioned(top: 15, left: 15, child: _cornerWidget(isTop: true, isLeft: true)),
                     Positioned(top: 15, right: 15, child: _cornerWidget(isTop: true, isLeft: false)),
                     Positioned(bottom: 15, left: 15, child: _cornerWidget(isTop: false, isLeft: true)),
@@ -294,17 +315,13 @@ class _ScanPageState extends State<ScanPage> with WidgetsBindingObserver {
 
                     // Teks Guidance
                     const Align(
-                      alignment: Alignment.center,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.filter_center_focus, color: Colors.white24, size: 60),
-                          SizedBox(height: 10),
-                          Text(
-                            "Arahkan kamera ke tomat",
-                            style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500, shadows: [Shadow(blurRadius: 2, color: Colors.black)]),
-                          ),
-                        ],
+                      alignment: Alignment.bottomCenter,
+                      child: Padding(
+                        padding: EdgeInsets.only(bottom: 40),
+                        child: Text(
+                          "Pusatkan tomat di dalam kotak putih",
+                          style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500, shadows: [Shadow(blurRadius: 2, color: Colors.black)]),
+                        ),
                       ),
                     ),
                   ],
@@ -322,14 +339,13 @@ class _ScanPageState extends State<ScanPage> with WidgetsBindingObserver {
                 children: [
                   const Text("Deteksi Kematangan Tomat", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 5),
-                  const Text("Posisikan tomat di dalam frame agar akurat", style: TextStyle(color: Colors.grey, fontSize: 14)),
+                  const Text("Jaga jarak kamera sekitar 15 cm", style: TextStyle(color: Colors.grey, fontSize: 14)),
                   
                   const Spacer(),
 
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
-                      // Tombol Galeri
                       _controlButton(
                         icon: Icons.photo_library_outlined,
                         label: "Galeri",
@@ -338,7 +354,6 @@ class _ScanPageState extends State<ScanPage> with WidgetsBindingObserver {
                         onTap: _pickFromGallery,
                       ),
                       
-                      // SHUTTER (Tombol Foto)
                       Material(
                         color: Colors.transparent,
                         child: InkWell(
@@ -360,7 +375,6 @@ class _ScanPageState extends State<ScanPage> with WidgetsBindingObserver {
                         ),
                       ),
                       
-                      // Tombol Flash
                       _controlButton(
                         icon: _flashMode == FlashMode.off ? Icons.flash_off : Icons.flash_on,
                         label: _flashMode == FlashMode.off ? "Flash Off" : "Flash On",
@@ -380,7 +394,6 @@ class _ScanPageState extends State<ScanPage> with WidgetsBindingObserver {
     );
   }
 
-  // Widget Helper Frame Pojok Merah
   Widget _cornerWidget({required bool isTop, required bool isLeft}) {
     const double size = 30;
     const double thickness = 4;
@@ -406,7 +419,6 @@ class _ScanPageState extends State<ScanPage> with WidgetsBindingObserver {
     );
   }
 
-  // Widget Helper Tombol Kontrol Kecil
   Widget _controlButton({
     required IconData icon, 
     required String label, 

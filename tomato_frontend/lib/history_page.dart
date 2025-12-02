@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'history_service.dart';
 import 'api_service.dart';
-import 'widgets.dart'; // Import AppDrawer
+import 'widgets.dart'; 
 import 'analysis_page.dart'; 
 
 class HistoryPage extends StatefulWidget {
@@ -14,10 +14,9 @@ class HistoryPage extends StatefulWidget {
 class _HistoryPageState extends State<HistoryPage> {
   String _selectedFilter = "Semua"; 
 
-  // --- LOGIC FILTER (SAMA) ---
-  List<ScanResult> get filteredHistory {
+  // Fungsi Filter dipindah ke dalam agar bisa menerima list dinamis
+  List<ScanResult> _filterData(List<ScanResult> allData) {
     final now = DateTime.now();
-    final allData = HistoryService.history;
 
     if (_selectedFilter == "Hari Ini") {
       return allData.where((item) {
@@ -38,9 +37,10 @@ class _HistoryPageState extends State<HistoryPage> {
     return allData; 
   }
 
-  int get mentahCount => HistoryService.history.where((e) => e.label == "UNRIPE").length;
-  int get setengahCount => HistoryService.history.where((e) => e.label == "TURNING").length;
-  int get matangCount => HistoryService.history.where((e) => e.label == "RIPE").length;
+  // Helper hitung statistik
+  int _countByLabel(List<ScanResult> data, String label) {
+    return data.where((e) => e.label == label).length;
+  }
 
   String _formatTime(DateTime time) {
     final now = DateTime.now();
@@ -51,20 +51,17 @@ class _HistoryPageState extends State<HistoryPage> {
     } else if (diff.inDays == 1 || (diff.inDays == 0 && time.day != now.day)) {
       return "Kemarin, ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}";
     } else {
-      return "${diff.inDays} hari lalu, ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}";
+      return "${diff.inDays} hari lalu";
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final displayList = filteredHistory;
-
     return Scaffold(
       backgroundColor: Colors.white,
       drawer: const AppDrawer(),
-      // --- HEADER BARU (KONSISTEN) ---
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: const Color(0xFFFF3B30),
         elevation: 0,
         centerTitle: true,
         leading: Builder(
@@ -75,103 +72,117 @@ class _HistoryPageState extends State<HistoryPage> {
               child: Container(
                 margin: const EdgeInsets.all(8), 
                 decoration: BoxDecoration(
-                  color: Colors.white, 
+                  color: Colors.white.withOpacity(0.2), 
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFFF3B30).withOpacity(0.5), width: 1.5)
+                  border: Border.all(color: Colors.white, width: 1.5)
                 ),
-                child: const Icon(Icons.menu, color: Color(0xFFFF3B30), size: 24),
+                child: const Icon(Icons.menu, color: Colors.white, size: 20),
               ),
             );
           }
         ),
         title: const Text(
-          "History",
-          style: TextStyle(color: Color(0xFFFF3B30), fontWeight: FontWeight.bold),
+          "Riwayat Scan",
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
       ),
-      body: Column(
-        children: [
-          // STATS HEADER
-          Container(
-            padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
-            color: Colors.white,
-            child: Row(
-              children: [
-                _buildStatCard("Mentah", mentahCount, const Color(0xFF00C853)), 
-                const SizedBox(width: 10),
-                _buildStatCard("Setengah Matang", setengahCount, const Color(0xFFFFAB00)), 
-                const SizedBox(width: 10),
-                _buildStatCard("Matang", matangCount, const Color(0xFFFF3B30)), 
-              ],
-            ),
-          ),
+      // --- WRAP DENGAN VALUE LISTENABLE BUILDER ---
+      body: ValueListenableBuilder<List<ScanResult>>(
+        valueListenable: HistoryService.historyNotifier, // Mendengarkan perubahan
+        builder: (context, allHistory, child) {
+          
+          // Data yang ditampilkan di UI diambil dari 'allHistory' yang real-time
+          final displayList = _filterData(allHistory);
+          
+          final mentahCount = _countByLabel(allHistory, "UNRIPE");
+          final setengahCount = _countByLabel(allHistory, "TURNING");
+          final matangCount = _countByLabel(allHistory, "RIPE");
 
-          // FILTER TABS
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-            child: Row(
-              children: [
-                _buildFilterBtn("Semua"),
-                const SizedBox(width: 10),
-                _buildFilterBtn("Hari Ini"),
-                const SizedBox(width: 10),
-                _buildFilterBtn("Minggu Ini"),
-                const SizedBox(width: 10),
-                _buildFilterBtn("Bulan Ini"),
-              ],
-            ),
-          ),
+          return Column(
+            children: [
+              // STATS HEADER
+              Container(
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
+                color: Colors.white,
+                child: Row(
+                  children: [
+                    _buildStatCard("Mentah", mentahCount, const Color(0xFF00C853)), 
+                    const SizedBox(width: 10),
+                    _buildStatCard("Setengah", setengahCount, const Color(0xFFFFAB00)), 
+                    const SizedBox(width: 10),
+                    _buildStatCard("Matang", matangCount, const Color(0xFFFF3B30)), 
+                  ],
+                ),
+              ),
 
-          const SizedBox(height: 10),
+              // FILTER TABS
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                child: Row(
+                  children: [
+                    _buildFilterBtn("Semua"),
+                    const SizedBox(width: 10),
+                    _buildFilterBtn("Hari Ini"),
+                    const SizedBox(width: 10),
+                    _buildFilterBtn("Minggu Ini"),
+                    const SizedBox(width: 10),
+                    _buildFilterBtn("Bulan Ini"),
+                  ],
+                ),
+              ),
 
-          // LIST HISTORY
-          Expanded(
-            child: displayList.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.history, size: 60, color: Colors.grey[300]),
-                        const SizedBox(height: 10),
-                        Text(
-                          "Tidak ada riwayat scan $_selectedFilter",
-                          style: TextStyle(color: Colors.grey[400]),
-                        ),
-                      ],
-                    ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    itemCount: displayList.length + 1, 
-                    itemBuilder: (context, index) {
-                      if (index == displayList.length) {
-                        return Padding(
-                          padding: const EdgeInsets.all(20.0),
-                          child: Center(
-                            child: Text(
-                              "Tidak ada riwayat scan lainnya",
-                              style: TextStyle(color: Colors.grey[400], fontSize: 12),
+              const SizedBox(height: 10),
+
+              // LIST HISTORY
+              Expanded(
+                child: displayList.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.history, size: 60, color: Colors.grey[300]),
+                            const SizedBox(height: 10),
+                            Text(
+                              "Tidak ada riwayat scan $_selectedFilter",
+                              style: TextStyle(color: Colors.grey[400]),
                             ),
-                          ),
-                        );
-                      }
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        itemCount: displayList.length + 1, 
+                        itemBuilder: (context, index) {
+                          if (index == displayList.length) {
+                            return Padding(
+                              padding: const EdgeInsets.all(20.0),
+                              child: Center(
+                                child: Text(
+                                  "Tidak ada riwayat scan lainnya",
+                                  style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                                ),
+                              ),
+                            );
+                          }
 
-                      final item = displayList[index];
-                      String confidenceStr = item.confidence.contains('%') 
-                          ? item.confidence 
-                          : "${item.confidence}%";
+                          final item = displayList[index];
+                          String confidenceStr = item.confidence.contains('%') 
+                              ? item.confidence 
+                              : "${item.confidence}%";
 
-                      return _buildHistoryCard(item, confidenceStr, index);
-                    },
-                  ),
-          ),
-        ],
+                          return _buildHistoryCard(item, confidenceStr, index);
+                        },
+                      ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
 
-  // --- WIDGET BUILDERS ---
+  // --- WIDGET BUILDERS (SAMA SEPERTI SEBELUMNYA) ---
 
   Widget _buildStatCard(String label, int count, Color color) {
     return Expanded(
@@ -302,7 +313,7 @@ class _HistoryPageState extends State<HistoryPage> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    "Tingkat kematangan: $confidence", 
+                    "Tingkat Akurasi: $confidence", 
                     style: const TextStyle(color: Colors.grey, fontSize: 13),
                   ),
                   const SizedBox(height: 2),

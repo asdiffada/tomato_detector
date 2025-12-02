@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'history_service.dart';
 import 'api_service.dart';
-import 'widgets.dart'; // Import AppDrawer
+import 'widgets.dart';
 
 class AnalysisPage extends StatelessWidget {
   final Function(int)? onTabChange; 
@@ -10,31 +10,43 @@ class AnalysisPage extends StatelessWidget {
 
   // --- LOGIC CHART ---
   Map<String, double> _getChartData(ScanResult result) {
-    bool isRuleBased = result.confidence.contains("100%") || result.debugInfo.contains("Hue");
+    // 1. Cek apakah string debug_info mengandung format data JST baru
+    // Format dari Backend: "... | JST Probs: M:0.99 S:0.01 U:0.00"
+    if (result.debugInfo.contains("JST Probs")) {
+      try {
+        // Ambil bagian setelah "JST Probs:"
+        final parts = result.debugInfo.split("JST Probs:")[1];
+        
+        // Parsing angka setelah M:, S:, dan U:
+        // Contoh string: " M:0.99 S:0.01 U:0.00"
+        final mStr = parts.split("M:")[1].split(" ")[0]; // Ambil 0.99
+        final sStr = parts.split("S:")[1].split(" ")[0]; // Ambil 0.01
+        
+        // U biasanya ada di akhir string, jadi kita trim() biar bersih
+        String uStr = parts.split("U:")[1]; 
+        // Bersihkan karakter aneh jika ada (misal sisa kurung tutup)
+        uStr = uStr.replaceAll(RegExp(r'[^0-9.]'), ''); 
 
-    if (isRuleBased) {
-      if (result.label == "RIPE") return {"Matang": 100, "Setengah Matang": 0, "Mentah": 0};
-      if (result.label == "TURNING") return {"Matang": 0, "Setengah Matang": 100, "Mentah": 0};
-      if (result.label == "UNRIPE") return {"Matang": 0, "Setengah Matang": 0, "Mentah": 100};
+        double matang = double.parse(mStr) * 100;
+        double setengah = double.parse(sStr) * 100;
+        double mentah = double.parse(uStr) * 100;
+
+        return {
+          "Matang": matang,
+          "Setengah Matang": setengah,
+          "Mentah": mentah,
+        };
+      } catch (e) {
+        debugPrint("Gagal parsing chart data: $e");
+        // Lanjut ke fallback di bawah jika gagal
+      }
     }
 
-    try {
-      // Parsing data dari string debug_info (format dari backend)
-      final rStr = result.debugInfo.split('R')[1].split(' ')[0];
-      final tStr = result.debugInfo.split('T')[1].split(' ')[0];
-      final uStr = result.debugInfo.split('U')[1];
-      
-      return {
-        "Matang": double.parse(rStr) * 100,
-        "Setengah Matang": double.parse(tStr) * 100,
-        "Mentah": double.parse(uStr) * 100,
-      };
-    } catch (e) {
-      // Fallback jika parsing gagal
-      if (result.label == "RIPE") return {"Matang": 100, "Setengah Matang": 0, "Mentah": 0};
-      if (result.label == "TURNING") return {"Matang": 0, "Setengah Matang": 100, "Mentah": 0};
-      return {"Matang": 0, "Setengah Matang": 0, "Mentah": 100};
-    }
+    // --- FALLBACK (JIKA PARSING GAGAL ATAU DATA LAMA) ---
+    // Ini yang membuat diagram jadi "100%" rata jika logic di atas error.
+    if (result.label == "RIPE") return {"Matang": 100, "Setengah Matang": 0, "Mentah": 0};
+    if (result.label == "TURNING") return {"Matang": 0, "Setengah Matang": 100, "Mentah": 0};
+    return {"Matang": 0, "Setengah Matang": 0, "Mentah": 100};
   }
 
   Map<String, String> _getRecommendation(String label) {
@@ -231,7 +243,12 @@ class AnalysisPage extends StatelessWidget {
                           children: [
                             _buildStatusItem(Icons.check_circle, color, "Status", shortStatus),
                             _buildStatusItem(Icons.calendar_today, Colors.blue, "Konsumsi", "Hari ini"),
-                            _buildStatusItem(Icons.star, Colors.orange, "Kualitas", "Excellent"),
+                            _buildStatusItem(
+                                Icons.star, 
+                                Colors.orange, 
+                                "Kualitas", 
+                                result.quality 
+                              ),
                           ],
                         )
                       ],
@@ -248,7 +265,7 @@ class AnalysisPage extends StatelessWidget {
               children: [
                 Icon(Icons.bar_chart, color: Color(0xFF3F51B5)),
                 SizedBox(width: 10),
-                Text("Tingkat Kepercayaan", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                Text("Tingkat Akurasi", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               ],
             ),
             const SizedBox(height: 10),
@@ -315,6 +332,15 @@ class AnalysisPage extends StatelessWidget {
               "${result.textureScore}%"
             ),
 
+            // UKURAN
+            _buildDetailRow(
+              Icons.straighten,
+              "Ukuran", 
+              "Diameter Rata-rata", 
+              Colors.purple, 
+              "${result.sizeMm} mm"
+            ),
+
             const SizedBox(height: 30),
 
             // REKOMENDASI SECTION
@@ -358,7 +384,7 @@ class AnalysisPage extends StatelessWidget {
               height: 55,
               child: ElevatedButton.icon(
                 onPressed: () {
-                  if (onTabChange != null) onTabChange!(2); // Pindah Tab Scan
+                  if (onTabChange != null) onTabChange!(2);
                 },
                 icon: const Icon(Icons.camera_alt),
                 label: const Text("Scan Tomat Lain", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
@@ -377,7 +403,7 @@ class AnalysisPage extends StatelessWidget {
               width: double.infinity,
               child: OutlinedButton.icon(
                 onPressed: () {
-                   if (onTabChange != null) onTabChange!(3); // Pindah Tab Riwayat
+                   if (onTabChange != null) onTabChange!(3);
                 },
                 icon: const Icon(Icons.history, size: 18),
                 label: const Text("Riwayat Scan"),

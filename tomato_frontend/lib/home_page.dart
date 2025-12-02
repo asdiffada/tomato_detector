@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'dart:math';
 import 'history_service.dart'; 
 import 'api_service.dart'; 
-import 'widgets.dart'; // Import AppDrawer
-import 'analysis_page.dart'; // IMPORT PENTING: Agar bisa pindah ke halaman analisis
+import 'widgets.dart'; 
+import 'analysis_page.dart';
 
 class HomePage extends StatefulWidget {
   final VoidCallback? onScanPress; 
@@ -18,37 +18,6 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
-  int get todayScanCount {
-    final now = DateTime.now();
-    return HistoryService.history.where((item) {
-      return item.timestamp.year == now.year &&
-             item.timestamp.month == now.month &&
-             item.timestamp.day == now.day;
-    }).length;
-  }
-
-  String get averageAccuracy {
-    if (HistoryService.history.isEmpty) return "0%";
-    double total = 0;
-    int count = 0;
-    for (var item in HistoryService.history) {
-      try {
-        String numPart = item.confidence.split('%')[0];
-        total += double.parse(numPart);
-        count++;
-      } catch (e) {}
-    }
-    if (count == 0) return "0%";
-    return "${(total / count).toStringAsFixed(0)}%";
-  }
-
-  Map<String, int> get chartData {
-    int ripe = HistoryService.history.where((i) => i.label == "RIPE").length;
-    int turning = HistoryService.history.where((i) => i.label == "TURNING").length;
-    int unripe = HistoryService.history.where((i) => i.label == "UNRIPE").length;
-    return {"RIPE": ripe, "TURNING": turning, "UNRIPE": unripe};
-  }
-
   String _formatTime(DateTime time) {
     final now = DateTime.now();
     final diff = now.difference(time);
@@ -56,7 +25,7 @@ class _HomePageState extends State<HomePage> {
     if (diff.inDays == 0 && time.day == now.day) {
       return "Hari ini, ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}";
     } else if (diff.inDays == 1 || (diff.inDays == 0 && time.day != now.day)) {
-      return "Kemarin, ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}";
+      return "Kemarin";
     } else {
       return "${diff.inDays} hari lalu";
     }
@@ -64,9 +33,6 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final data = chartData;
-    int totalData = HistoryService.history.length;
-
     return Scaffold(
       key: _scaffoldKey, 
       backgroundColor: Colors.white,
@@ -97,62 +63,110 @@ class _HomePageState extends State<HomePage> {
           style: TextStyle(color: Color(0xFFFF3B30), fontWeight: FontWeight.bold),
         ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-        child: Column(
-          children: [
-            // BANNER
-            _buildHeroBanner(),
+      // --- WRAP BODY DENGAN VALUE LISTENABLE ---
+      body: ValueListenableBuilder<List<ScanResult>>(
+        valueListenable: HistoryService.historyNotifier,
+        builder: (context, history, child) {
+          
+          // Logic Statistik
+          final now = DateTime.now();
+          int todayScanCount = history.where((item) {
+            return item.timestamp.year == now.year &&
+                   item.timestamp.month == now.month &&
+                   item.timestamp.day == now.day;
+          }).length;
 
-            const SizedBox(height: 20),
+          double totalConf = 0;
+          int countConf = 0;
+          for (var item in history) {
+            try {
+              String numPart = item.confidence.split('%')[0];
+              totalConf += double.parse(numPart);
+              countConf++;
+            } catch (e) {}
+          }
+          String averageAccuracy = countConf == 0 ? "0%" : "${(totalConf / countConf).toStringAsFixed(0)}%";
 
-            // STATS
-            _buildStatsRow(),
-            const SizedBox(height: 20),
+          int ripe = history.where((i) => i.label == "RIPE").length;
+          int turning = history.where((i) => i.label == "TURNING").length;
+          int unripe = history.where((i) => i.label == "UNRIPE").length;
+          int totalData = history.length;
 
-            // CHART
-            _buildChartSection(data, totalData),
-            const SizedBox(height: 20),
-
-            // RECENT SCANS HEADER
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          return SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            child: Column(
               children: [
-                const Text("Scan Terbaru", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                TextButton(
-                  onPressed: widget.onHistoryPress, 
-                  child: const Text("Lihat Semua", style: TextStyle(color: Color(0xFFFF3B30), fontWeight: FontWeight.bold, fontSize: 12)),
-                )
+                _buildHeroBanner(),
+                const SizedBox(height: 20),
+
+                // STATS
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildStatCard(
+                        icon: Icons.check_circle_outline,
+                        iconColor: Colors.green,
+                        percentage: "", 
+                        count: "$todayScanCount", 
+                        label: "Scan Hari Ini",
+                      ),
+                    ),
+                    const SizedBox(width: 15),
+                    Expanded(
+                      child: _buildStatCard(
+                        icon: Icons.access_time,
+                        iconColor: Colors.orange,
+                        percentage: "",
+                        count: averageAccuracy, 
+                        label: "Rata-rata Akurasi",
+                        isOrange: true,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+
+                // CHART
+                _buildChartSection(ripe, turning, unripe, totalData),
+                const SizedBox(height: 20),
+
+                // RECENT SCANS
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text("Scan Terbaru", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    TextButton(
+                      onPressed: widget.onHistoryPress, 
+                      child: const Text("Lihat Semua", style: TextStyle(color: Color(0xFFFF3B30), fontWeight: FontWeight.bold, fontSize: 12)),
+                    )
+                  ],
+                ),
+                const SizedBox(height: 10),
+                
+                if (history.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(20.0),
+                    child: Text("Belum ada data scan.", style: TextStyle(color: Colors.grey)),
+                  )
+                else
+                  ...history.take(3).map((scan) {
+                    String timeLabel = _formatTime(scan.timestamp);
+                    String conf = scan.confidence.contains('%') ? scan.confidence : "${scan.confidence}%";
+                    return _buildHistoryStyleItem(context, scan, conf, timeLabel);
+                  }).toList(),
+
+                const SizedBox(height: 20),
+                _buildTipsCard(),
+                const SizedBox(height: 80),
               ],
             ),
-            const SizedBox(height: 10),
-            
-            // LIST SCAN TERBARU
-            if (HistoryService.history.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(20.0),
-                child: Text("Belum ada data scan.", style: TextStyle(color: Colors.grey)),
-              )
-            else
-              ...HistoryService.history.take(3).map((scan) {
-                String timeLabel = _formatTime(scan.timestamp);
-                String conf = scan.confidence.contains('%') ? scan.confidence : "${scan.confidence}%";
-
-                // Kita kirim 'context' dan 'scan' object agar bisa di-klik
-                return _buildHistoryStyleItem(context, scan, conf, timeLabel);
-              }).toList(),
-
-            const SizedBox(height: 20),
-            _buildTipsCard(),
-            const SizedBox(height: 80),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
 
-  // --- WIDGET BUILDERS ---
-
+  // --- WIDGET BUILDERS SAMA (COPY DARI SEBELUMNYA ATAU GUNAKAN YANG DI BAWAH) ---
   Widget _buildHeroBanner() {
     return Container(
       width: double.infinity,
@@ -199,41 +213,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildStatsRow() {
-    return Row(
-      children: [
-        Expanded(
-          child: _buildStatCard(
-            icon: Icons.check_circle_outline,
-            iconColor: Colors.green,
-            percentage: "", 
-            count: "$todayScanCount", 
-            label: "Scan Hari Ini",
-          ),
-        ),
-        const SizedBox(width: 15),
-        Expanded(
-          child: _buildStatCard(
-            icon: Icons.access_time,
-            iconColor: Colors.orange,
-            percentage: "",
-            count: averageAccuracy, 
-            label: "Rata-rata Akurasi",
-            isOrange: true,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStatCard({
-    required IconData icon,
-    required Color iconColor,
-    required String percentage,
-    required String count,
-    required String label,
-    bool isOrange = false,
-  }) {
+  Widget _buildStatCard({required IconData icon, required Color iconColor, required String percentage, required String count, required String label, bool isOrange = false}) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -258,8 +238,7 @@ class _HomePageState extends State<HomePage> {
                 ),
                 child: Icon(icon, color: iconColor, size: 20),
               ),
-              if (percentage.isNotEmpty)
-                Text(percentage, style: TextStyle(color: iconColor, fontWeight: FontWeight.bold, fontSize: 12)),
+              if (percentage.isNotEmpty) Text(percentage, style: TextStyle(color: iconColor, fontWeight: FontWeight.bold, fontSize: 12)),
             ],
           ),
           const SizedBox(height: 15),
@@ -270,7 +249,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildChartSection(Map<String, int> data, int total) {
+  Widget _buildChartSection(int ripe, int turning, int unripe, int total) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -302,12 +281,7 @@ class _HomePageState extends State<HomePage> {
               height: 200,
               width: 200,
               child: CustomPaint(
-                painter: DonutChartPainter(
-                  ripe: data['RIPE']!, 
-                  turning: data['TURNING']!, 
-                  unripe: data['UNRIPE']!,
-                  total: total
-                ),
+                painter: DonutChartPainter(ripe: ripe, turning: turning, unripe: unripe, total: total),
               ),
             ),
             
@@ -316,9 +290,9 @@ class _HomePageState extends State<HomePage> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                   _buildLegendItem("Matang", const Color(0xFFD50000), data['RIPE']!, total), 
-                   _buildLegendItem("Setengah Matang", const Color(0xFFFFAB00), data['TURNING']!, total), 
-                   _buildLegendItem("Mentah", const Color(0xFF00C853), data['UNRIPE']!, total), 
+                   _buildLegendItem("Matang", const Color(0xFFD50000), ripe, total), 
+                   _buildLegendItem("Setengah Matang", const Color(0xFFFFAB00), turning, total), 
+                   _buildLegendItem("Mentah", const Color(0xFF00C853), unripe, total), 
                 ],
               )
         ],
@@ -337,7 +311,6 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // --- ITEM LIST STYLE (UPDATED: Bisa Di-klik) ---
   Widget _buildHistoryStyleItem(BuildContext context, ScanResult item, String confidence, String timeLabel) {
     Color badgeColor;
     Color badgeTextCol;
@@ -357,13 +330,9 @@ class _HomePageState extends State<HomePage> {
       badgeLabel = "Mentah";
     }
 
-    // Menggunakan GestureDetector untuk Navigasi
     return GestureDetector(
       onTap: () {
-        // 1. Set item ini sebagai data terbaru
         HistoryService.latestResult = item;
-        
-        // 2. Pindah ke Halaman Analisis
         Navigator.push(
           context,
           MaterialPageRoute(builder: (context) => const AnalysisPage()),
@@ -418,7 +387,7 @@ class _HomePageState extends State<HomePage> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    "Tingkat kematangan: $confidence", 
+                    "Tingkat Akurasi: $confidence", 
                     style: const TextStyle(color: Colors.grey, fontSize: 12),
                   ),
                   const SizedBox(height: 2),
