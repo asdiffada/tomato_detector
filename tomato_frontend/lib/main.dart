@@ -4,9 +4,13 @@ import 'scan_page.dart';
 import 'analysis_page.dart';
 import 'history_page.dart';
 import 'discover_page.dart';
+import 'history_service.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  await HistoryService.loadHistory(); 
+  
   runApp(const MyApp());
 }
 
@@ -16,12 +20,13 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Tomato Detector',
+      title: 'TomaCam',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFFF3B30)),
         useMaterial3: true,
         scaffoldBackgroundColor: Colors.white,
+        fontFamily: 'Roboto',
       ),
       home: const MainNavigation(),
     );
@@ -55,22 +60,16 @@ class _MainNavigationState extends State<MainNavigation> {
   @override
   Widget build(BuildContext context) {
     final List<Widget> pages = [
-      // 0: HOME
       HomePage(
         onScanPress: () => _onTabTapped(2), 
-        onHistoryPress: () => _onTabTapped(3), // <-- TAMBAHAN: Pindah ke Tab History (Index 3)
+        onHistoryPress: () => _onTabTapped(3),
       ),
-      
-      // 1: ANALYSIS
       AnalysisPage(onTabChange: _onTabTapped), 
-      
-      // 2: SCAN
       ScanPage(onTabChange: _onTabTapped, isActive: _currentIndex == 2),
       
-      // 3: HISTORY
-      const HistoryPage(), 
+      // --- PATCH DISINI: Menghubungkan HistoryPage dengan navigasi ---
+      HistoryPage(onTabChange: _onTabTapped), 
       
-      // 4: DISCOVER
       const DiscoverPage(),
     ];
 

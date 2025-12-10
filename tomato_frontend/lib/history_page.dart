@@ -1,58 +1,43 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart'; // IMPORT SUDAH DITAMBAHKAN
+import 'dart:io';
 import 'history_service.dart';
-import 'api_service.dart';
-import 'widgets.dart'; 
-import 'analysis_page.dart'; 
+import 'widgets.dart';
 
 class HistoryPage extends StatefulWidget {
-  const HistoryPage({super.key});
+  final Function(int)? onTabChange;
+
+  const HistoryPage({super.key, this.onTabChange});
 
   @override
   State<HistoryPage> createState() => _HistoryPageState();
 }
 
 class _HistoryPageState extends State<HistoryPage> {
-  String _selectedFilter = "Semua"; 
+  String _selectedFilter = "Semua";
 
-  // Fungsi Filter dipindah ke dalam agar bisa menerima list dinamis
   List<ScanResult> _filterData(List<ScanResult> allData) {
-    final now = DateTime.now();
+    if (_selectedFilter == "Semua") return allData;
 
-    if (_selectedFilter == "Hari Ini") {
-      return allData.where((item) {
-        return item.timestamp.year == now.year &&
-               item.timestamp.month == now.month &&
-               item.timestamp.day == now.day;
-      }).toList();
-    } else if (_selectedFilter == "Minggu Ini") {
-      return allData.where((item) {
-        return now.difference(item.timestamp).inDays <= 7;
-      }).toList();
-    } else if (_selectedFilter == "Bulan Ini") {
-      return allData.where((item) {
-        return item.timestamp.year == now.year &&
-               item.timestamp.month == now.month;
-      }).toList();
-    }
-    return allData; 
+    final now = DateTime.now();
+    return allData.where((item) {
+      final itemDate = item.timestamp;
+      if (_selectedFilter == "Hari Ini") {
+        return itemDate.year == now.year &&
+            itemDate.month == now.month &&
+            itemDate.day == now.day;
+      } else if (_selectedFilter == "Minggu Ini") {
+        final difference = now.difference(itemDate).inDays;
+        return difference <= 7;
+      } else if (_selectedFilter == "Bulan Ini") {
+        return itemDate.year == now.year && itemDate.month == now.month;
+      }
+      return true;
+    }).toList();
   }
 
-  // Helper hitung statistik
   int _countByLabel(List<ScanResult> data, String label) {
-    return data.where((e) => e.label == label).length;
-  }
-
-  String _formatTime(DateTime time) {
-    final now = DateTime.now();
-    final diff = now.difference(time);
-
-    if (diff.inDays == 0 && time.day == now.day) {
-      return "Hari ini, ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}";
-    } else if (diff.inDays == 1 || (diff.inDays == 0 && time.day != now.day)) {
-      return "Kemarin, ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}";
-    } else {
-      return "${diff.inDays} hari lalu";
-    }
+    return data.where((item) => item.label == label).length;
   }
 
   @override
@@ -61,7 +46,7 @@ class _HistoryPageState extends State<HistoryPage> {
       backgroundColor: Colors.white,
       drawer: const AppDrawer(),
       appBar: AppBar(
-        backgroundColor: const Color(0xFFFF3B30),
+        backgroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
         leading: Builder(
@@ -70,55 +55,55 @@ class _HistoryPageState extends State<HistoryPage> {
               onTap: () => Scaffold.of(context).openDrawer(),
               borderRadius: BorderRadius.circular(8),
               child: Container(
-                margin: const EdgeInsets.all(8), 
+                margin: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2), 
+                  color: Colors.white,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.white, width: 1.5)
+                  border:
+                      Border.all(color: const Color(0xFFFF3B30), width: 1.5),
                 ),
-                child: const Icon(Icons.menu, color: Colors.white, size: 20),
+                child: const Icon(Icons.menu,
+                    color: Color(0xFFFF3B30), size: 20),
               ),
             );
-          }
+          },
         ),
         title: const Text(
-          "Riwayat Scan",
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          "History",
+          style: TextStyle(
+              color: Color(0xFFFF3B30), fontWeight: FontWeight.bold),
         ),
       ),
-      // --- WRAP DENGAN VALUE LISTENABLE BUILDER ---
       body: ValueListenableBuilder<List<ScanResult>>(
-        valueListenable: HistoryService.historyNotifier, // Mendengarkan perubahan
+        valueListenable: HistoryService.historyNotifier,
         builder: (context, allHistory, child) {
-          
-          // Data yang ditampilkan di UI diambil dari 'allHistory' yang real-time
-          final displayList = _filterData(allHistory);
-          
+          final sortedHistory = List<ScanResult>.from(allHistory)
+            ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
+          final displayList = _filterData(sortedHistory);
           final mentahCount = _countByLabel(allHistory, "UNRIPE");
-          final setengahCount = _countByLabel(allHistory, "TURNING");
           final matangCount = _countByLabel(allHistory, "RIPE");
 
           return Column(
             children: [
-              // STATS HEADER
               Container(
                 padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
                 color: Colors.white,
                 child: Row(
                   children: [
-                    _buildStatCard("Mentah", mentahCount, const Color(0xFF00C853)), 
+                    _buildStatCard("Mentah", mentahCount,
+                        const Color(0xFF00C853)),
                     const SizedBox(width: 10),
-                    _buildStatCard("Setengah", setengahCount, const Color(0xFFFFAB00)), 
-                    const SizedBox(width: 10),
-                    _buildStatCard("Matang", matangCount, const Color(0xFFFF3B30)), 
+                    _buildStatCard("Matang", matangCount,
+                        const Color(0xFFFF3B30)),
                   ],
                 ),
               ),
 
-              // FILTER TABS
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                 child: Row(
                   children: [
                     _buildFilterBtn("Semua"),
@@ -134,14 +119,14 @@ class _HistoryPageState extends State<HistoryPage> {
 
               const SizedBox(height: 10),
 
-              // LIST HISTORY
               Expanded(
                 child: displayList.isEmpty
                     ? Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.history, size: 60, color: Colors.grey[300]),
+                            Icon(Icons.history,
+                                size: 60, color: Colors.grey[300]),
                             const SizedBox(height: 10),
                             Text(
                               "Tidak ada riwayat scan $_selectedFilter",
@@ -152,7 +137,7 @@ class _HistoryPageState extends State<HistoryPage> {
                       )
                     : ListView.builder(
                         padding: const EdgeInsets.symmetric(horizontal: 20),
-                        itemCount: displayList.length + 1, 
+                        itemCount: displayList.length + 1,
                         itemBuilder: (context, index) {
                           if (index == displayList.length) {
                             return Padding(
@@ -160,16 +145,18 @@ class _HistoryPageState extends State<HistoryPage> {
                               child: Center(
                                 child: Text(
                                   "Tidak ada riwayat scan lainnya",
-                                  style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                                  style: TextStyle(
+                                      color: Colors.grey[400], fontSize: 12),
                                 ),
                               ),
                             );
                           }
 
                           final item = displayList[index];
-                          String confidenceStr = item.confidence.contains('%') 
-                              ? item.confidence 
-                              : "${item.confidence}%";
+                          String confidenceStr =
+                              item.confidence.contains('%')
+                                  ? item.confidence
+                                  : "${item.confidence}%";
 
                           return _buildHistoryCard(item, confidenceStr, index);
                         },
@@ -182,8 +169,6 @@ class _HistoryPageState extends State<HistoryPage> {
     );
   }
 
-  // --- WIDGET BUILDERS (SAMA SEPERTI SEBELUMNYA) ---
-
   Widget _buildStatCard(String label, int count, Color color) {
     return Expanded(
       child: Container(
@@ -192,19 +177,26 @@ class _HistoryPageState extends State<HistoryPage> {
           color: color,
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
-            BoxShadow(color: color.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))
+            BoxShadow(
+              color: color.withOpacity(0.4),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            )
           ],
         ),
         child: Column(
           children: [
             Text(
               "$count",
-              style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 2),
+            const SizedBox(height: 5),
             Text(
               label,
-              style: const TextStyle(color: Colors.white70, fontSize: 12),
+              style: const TextStyle(color: Colors.white, fontSize: 14),
             ),
           ],
         ),
@@ -213,23 +205,26 @@ class _HistoryPageState extends State<HistoryPage> {
   }
 
   Widget _buildFilterBtn(String text) {
-    bool isActive = _selectedFilter == text;
-    return GestureDetector(
+    bool isSelected = _selectedFilter == text;
+    return InkWell(
       onTap: () {
-        setState(() => _selectedFilter = text);
+        setState(() {
+          _selectedFilter = text;
+        });
       },
+      borderRadius: BorderRadius.circular(20),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: isActive ? const Color(0xFFFF3B30) : Colors.grey[100],
+          color: isSelected ? const Color(0xFFFF3B30) : Colors.grey[100],
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(
           text,
           style: TextStyle(
-            color: isActive ? Colors.white : Colors.black54,
-            fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-            fontSize: 13,
+            color: isSelected ? Colors.white : Colors.grey[600],
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
           ),
         ),
       ),
@@ -237,97 +232,105 @@ class _HistoryPageState extends State<HistoryPage> {
   }
 
   Widget _buildHistoryCard(ScanResult item, String confidence, int index) {
-    Color badgeColor;
-    Color badgeTextCol;
-    String badgeLabel;
+    final bool isRipe = item.label == "RIPE";
+    final Color statusColor =
+        isRipe ? const Color(0xFFFF3B30) : const Color(0xFF00C853);
+    final String statusText = isRipe ? "Matang" : "Mentah";
 
-    if (item.label == "RIPE") {
-      badgeColor = const Color(0xFFFFEBEE); 
-      badgeTextCol = const Color(0xFFFF3B30); 
-      badgeLabel = "Matang";
-    } else if (item.label == "TURNING") {
-      badgeColor = const Color(0xFFFFF3E0); 
-      badgeTextCol = const Color(0xFFFF9800); 
-      badgeLabel = "Setengah Matang"; 
-    } else {
-      badgeColor = const Color(0xFFE8F5E9); 
-      badgeTextCol = const Color(0xFF4CAF50); 
-      badgeLabel = "Mentah";
-    }
+    // PERBAIKAN: Gunakan hashCode karena 'id' tidak ada di ScanResult
+    String itemId = item.hashCode.toString().substring(0, 3);
 
-    return GestureDetector(
-      onTap: () {
-        HistoryService.latestResult = item;
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const AnalysisPage()),
-        );
-      },
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 15),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.grey.shade100),
-          boxShadow: [
-            BoxShadow(color: Colors.grey.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 5))
-          ],
-        ),
-        child: Row(
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Image.file(
-                item.image,
-                width: 60,
-                height: 60,
-                fit: BoxFit.cover,
-              ),
-            ),
-            const SizedBox(width: 15),
-            
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Container(
+      margin: const EdgeInsets.only(bottom: 15),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.grey.withOpacity(0.08),
+              blurRadius: 10,
+              offset: const Offset(0, 4))
+        ],
+        border: Border.all(color: Colors.grey.shade100),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(15),
+          onTap: () {
+            // Logic pindah tab
+            HistoryService.latestResult = item;
+            if (widget.onTabChange != null) {
+              widget.onTabChange!(1); 
+            }
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: item.image != null && item.image!.existsSync()
+                      ? Image.file(
+                          item.image!,
+                          width: 70,
+                          height: 70,
+                          fit: BoxFit.cover,
+                        )
+                      : Container(
+                          width: 70,
+                          height: 70,
+                          color: Colors.grey[200],
+                          child: const Icon(Icons.image_not_supported,
+                              color: Colors.grey),
+                        ),
+                ),
+                const SizedBox(width: 15),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        "Tomat #${item.hashCode.toString().substring(0, 3)}", 
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                        "Tomat #$itemId", // FIXED
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 16),
                       ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: badgeColor,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          badgeLabel,
-                          style: TextStyle(color: badgeTextCol, fontSize: 10, fontWeight: FontWeight.bold),
-                        ),
+                      const SizedBox(height: 4),
+                      Text(
+                        "Tingkat Akurasi: $confidence",
+                        style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        // Format tanggal sekarang aman karena intl sudah diimport
+                        DateFormat('EEE, d MMM y • HH:mm')
+                            .format(item.timestamp),
+                        style: TextStyle(color: Colors.grey[400], fontSize: 10),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    "Tingkat Akurasi: $confidence", 
-                    style: const TextStyle(color: Colors.grey, fontSize: 13),
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: statusColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    _formatTime(item.timestamp),
-                    style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                  child: Text(
+                    statusText,
+                    style: TextStyle(
+                      color: statusColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 10,
+                    ),
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(width: 8),
+                Icon(Icons.chevron_right, color: Colors.grey[300]),
+              ],
             ),
-            
-            const SizedBox(width: 10),
-            Icon(Icons.arrow_forward_ios_rounded, size: 16, color: Colors.grey[300]),
-          ],
+          ),
         ),
       ),
     );

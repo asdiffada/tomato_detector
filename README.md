@@ -1,5 +1,5 @@
-# Tomato Detector - Intelligent Ripeness Detection
-Tomato Detector is an Artificial Intelligence (AI) based mobile application designed to detect tomato ripeness levels accurately and in real-time.
+# TomaCam - Intelligent Ripeness Detection
+TomatoCam is an Artificial Intelligence (AI) based mobile application designed to detect tomato ripeness levels accurately and in real-time.
 
 This system employs a Computer Vision and Artificial Neural Network (ANN) approach using Normalized RGB feature extraction. It is capable of distinguishing tomatoes into three categories: Unripe, Turning, and Ripe, as well as analyzing physical quality metrics such as shape and texture.
 

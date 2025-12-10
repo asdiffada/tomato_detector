@@ -9,31 +9,38 @@ class AppDrawer extends StatelessWidget {
     return Drawer(
       child: Column(
         children: [
-          // --- HEADER SIDEBAR ---
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
             decoration: const BoxDecoration(
-              color: Color(0xFFFF3B30), // Merah Tomat
+              color: Color(0xFFFF3B30), 
               borderRadius: BorderRadius.only(
                 bottomRight: Radius.circular(30),
               ),
             ),
-            child: const Column(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // --- BAGIAN LOGO DIGANTI ---
                 CircleAvatar(
                   radius: 30,
                   backgroundColor: Colors.white,
-                  child: Icon(Icons.eco, color: Color(0xFFFF3B30), size: 35),
+                  child: Padding(
+                    padding: const EdgeInsets.all(8.0), // Atur padding sesuai selera
+                    child: Image.asset(
+                      'assets/tomato_icon.png', // Pastikan file ini ada di assets Anda
+                      fit: BoxFit.contain,
+                    ),
+                  ),
                 ),
-                SizedBox(height: 15),
-                Text(
-                  'Tomato Detector',
+                // ---------------------------
+                const SizedBox(height: 15),
+                const Text(
+                  'TomaCam',
                   style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
                 ),
-                Text(
-                  'Powered by JST AI',
+                const Text(
+                  'Powered by JST & FFT', 
                   style: TextStyle(color: Colors.white70, fontSize: 12),
                 ),
               ],
@@ -42,7 +49,6 @@ class AppDrawer extends StatelessWidget {
 
           const SizedBox(height: 10),
 
-          // --- MENU ITEMS ---
           Expanded(
             child: ListView(
               padding: EdgeInsets.zero,
@@ -52,15 +58,12 @@ class AppDrawer extends StatelessWidget {
                 _buildDrawerItem(context, Icons.camera_alt_rounded, "Scan", 2),
                 _buildDrawerItem(context, Icons.history_rounded, "History", 3),
                 _buildDrawerItem(context, Icons.explore_rounded, "Discover", 4),
-                
                 const Divider(height: 30),
-                
-                _buildDrawerItem(context, Icons.info_outline, "Tentang Aplikasi", -1), // -1 tidak pindah tab
+                _buildDrawerItem(context, Icons.info_outline, "About", -1), 
               ],
             ),
           ),
 
-          // --- FOOTER ---
           const Padding(
             padding: EdgeInsets.all(20),
             child: Text(
@@ -86,11 +89,9 @@ class AppDrawer extends StatelessWidget {
         ),
       ),
       onTap: () {
-        // Tutup Drawer dulu
-        Navigator.pop(context);
+        Navigator.pop(context); 
 
         if (targetIndex != -1) {
-          // Navigasi ke MainNavigation dengan index tertentu
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
@@ -98,7 +99,6 @@ class AppDrawer extends StatelessWidget {
             ),
           );
         } else {
-          // Logic untuk tombol "Tentang Aplikasi" (jika ada)
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text("Aplikasi Deteksi Tomat v1.0"))
           );

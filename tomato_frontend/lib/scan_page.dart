@@ -4,7 +4,7 @@ import 'package:camera/camera.dart';
 import 'package:image_picker/image_picker.dart';
 import 'api_service.dart';
 import 'history_service.dart';
-import 'widgets.dart'; // Import AppDrawer
+import 'widgets.dart';
 
 class ScanPage extends StatefulWidget {
   final Function(int) onTabChange;
@@ -25,7 +25,6 @@ class _ScanPageState extends State<ScanPage> with WidgetsBindingObserver {
   List<CameraDescription>? _cameras;
   bool _isCameraInitialized = false;
   bool _isLoading = false;
-  
   FlashMode _flashMode = FlashMode.off;
 
   @override
@@ -34,6 +33,16 @@ class _ScanPageState extends State<ScanPage> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     if (widget.isActive) {
       _initCamera();
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (_controller == null || !_controller!.value.isInitialized) return;
+    if (state == AppLifecycleState.inactive) {
+      _controller!.dispose();
+    } else if (state == AppLifecycleState.resumed) {
+      if (widget.isActive) _initCamera();
     }
   }
 
@@ -56,11 +65,8 @@ class _ScanPageState extends State<ScanPage> with WidgetsBindingObserver {
     super.dispose();
   }
 
-  // --- LOGIC KAMERA ---
-
   Future<void> _initCamera() async {
     if (_isCameraInitialized) return;
-
     try {
       _cameras = await availableCameras();
       if (_cameras != null && _cameras!.isNotEmpty) {
@@ -68,10 +74,7 @@ class _ScanPageState extends State<ScanPage> with WidgetsBindingObserver {
           (cam) => cam.lensDirection == CameraLensDirection.back,
           orElse: () => _cameras!.first,
         );
-
         await _setupController(camera);
-      } else {
-        debugPrint("Tidak ada kamera yang ditemukan");
       }
     } catch (e) {
       debugPrint("Camera Error: $e");
@@ -84,11 +87,9 @@ class _ScanPageState extends State<ScanPage> with WidgetsBindingObserver {
       ResolutionPreset.high,
       enableAudio: false,
     );
-
     try {
       await cameraController.initialize();
       await cameraController.setFlashMode(FlashMode.off);
-
       if (mounted) {
         setState(() {
           _controller = cameraController;
@@ -97,7 +98,7 @@ class _ScanPageState extends State<ScanPage> with WidgetsBindingObserver {
         });
       }
     } catch (e) {
-      debugPrint("Setup Controller Error: $e");
+      debugPrint("Setup Error: $e");
     }
   }
 
@@ -115,48 +116,36 @@ class _ScanPageState extends State<ScanPage> with WidgetsBindingObserver {
 
   Future<void> _toggleFlash() async {
     if (_controller == null || !_isCameraInitialized) return;
-
     FlashMode newMode = _flashMode == FlashMode.off ? FlashMode.torch : FlashMode.off;
-
     try {
       await _controller!.setFlashMode(newMode);
-      setState(() {
-        _flashMode = newMode;
-      });
+      setState(() => _flashMode = newMode);
     } catch (e) {
-      debugPrint("Flash Error: $e");
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Fitur flash tidak didukung kamera ini")),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Fitur flash tidak didukung")));
+      }
     }
   }
 
-  // --- LOGIC PROSES GAMBAR ---
-
   Future<void> _takePicture() async {
     if (_controller == null || !_controller!.value.isInitialized || _isLoading) return;
-
     setState(() => _isLoading = true);
-
     try {
       final XFile imageFile = await _controller!.takePicture();
-      
       if (_flashMode == FlashMode.torch) {
         await _controller!.setFlashMode(FlashMode.off);
         setState(() => _flashMode = FlashMode.off);
       }
-      
       await _processFile(File(imageFile.path));
     } catch (e) {
       setState(() => _isLoading = false);
-      _showError("Gagal mengambil foto: $e");
+      _showError("Gagal foto: $e");
     }
   }
 
   Future<void> _pickFromGallery() async {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-
     if (pickedFile != null) {
       setState(() => _isLoading = true);
       await _processFile(File(pickedFile.path));
@@ -166,17 +155,17 @@ class _ScanPageState extends State<ScanPage> with WidgetsBindingObserver {
   Future<void> _processFile(File image) async {
     try {
       var apiResult = await ApiService.uploadImage(image);
-
+      
       var details = apiResult['details'] ?? {};
       int colorScore = details['color_score'] ?? 0;
       int shapeScore = details['shape_score'] ?? 0;
       int textureScore = details['texture_score'] ?? 0;
-      int sizeMm = details['size_mm'] ?? 0; 
-
-      String quality = details['quality'] ?? "Good"; 
+      int sizeMm = details['size_mm'] ?? 0;
+      String quality = details['quality'] ?? "Unknown";
 
       var newScan = ScanResult(
         image: image,
+        imagePath: image.path, 
         label: apiResult['label'] ?? "Error",
         confidence: apiResult['confidence'] ?? "-",
         debugInfo: apiResult['debug_info'] ?? "-",
@@ -185,11 +174,11 @@ class _ScanPageState extends State<ScanPage> with WidgetsBindingObserver {
         colorScore: colorScore,
         shapeScore: shapeScore,
         textureScore: textureScore,
-        sizeMm: sizeMm, 
+        sizeMm: sizeMm,
         quality: quality,
       );
       
-      HistoryService.addResult(newScan);
+      await HistoryService.addResult(newScan);
 
       if (mounted) {
         setState(() => _isLoading = false);
@@ -198,15 +187,13 @@ class _ScanPageState extends State<ScanPage> with WidgetsBindingObserver {
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        _showError("Gagal memproses: $e");
+        _showError("Error: $e");
       }
     }
   }
 
   void _showError(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: Colors.red),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));
   }
 
   @override
@@ -242,11 +229,11 @@ class _ScanPageState extends State<ScanPage> with WidgetsBindingObserver {
               child: Container(
                 margin: const EdgeInsets.all(8), 
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2), 
+                  color: Colors.white, 
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFFF3B30).withOpacity(0.5), width: 1.5)
+                  border: Border.all(color: const Color(0xFFFF3B30), width: 1.5)
                 ),
-                child: const Icon(Icons.menu, color: Color(0xFFFF3B30), size: 24),
+                child: const Icon(Icons.menu, color: Color(0xFFFF3B30), size: 20),
               ),
             );
           }
@@ -258,7 +245,6 @@ class _ScanPageState extends State<ScanPage> with WidgetsBindingObserver {
       ),
       body: Column(
         children: [
-          // --- 1. AREA KAMERA (VIEWFINDER) ---
           Expanded(
             flex: 3,
             child: Container(
@@ -270,13 +256,11 @@ class _ScanPageState extends State<ScanPage> with WidgetsBindingObserver {
                   BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 5))
                 ],
               ),
-              // Clip agar sudut membulat
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(20),
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    // PERBAIKAN DISTORSI KAMERA
                     if (_isCameraInitialized && _controller != null)
                       LayoutBuilder(
                         builder: (context, constraints) {
@@ -294,12 +278,10 @@ class _ScanPageState extends State<ScanPage> with WidgetsBindingObserver {
                     else
                       const Center(child: CircularProgressIndicator(color: Colors.white)),
 
-                    // BOX PANDUAN UKURAN (Fixed Distance Method)
-                    // Box ini membantu user memposisikan tomat agar ukurannya konsisten
                     Center(
                       child: Container(
-                        width: 250, // Lebar fixed box
-                        height: 250, // Tinggi fixed box
+                        width: 250, 
+                        height: 250, 
                         decoration: BoxDecoration(
                           border: Border.all(color: Colors.white.withOpacity(0.5), width: 2, style: BorderStyle.solid),
                           borderRadius: BorderRadius.circular(12)
@@ -307,20 +289,28 @@ class _ScanPageState extends State<ScanPage> with WidgetsBindingObserver {
                       ),
                     ),
 
-                    // Frame Pojok Merah
                     Positioned(top: 15, left: 15, child: _cornerWidget(isTop: true, isLeft: true)),
                     Positioned(top: 15, right: 15, child: _cornerWidget(isTop: true, isLeft: false)),
                     Positioned(bottom: 15, left: 15, child: _cornerWidget(isTop: false, isLeft: true)),
                     Positioned(bottom: 15, right: 15, child: _cornerWidget(isTop: false, isLeft: false)),
 
-                    // Teks Guidance
                     const Align(
                       alignment: Alignment.bottomCenter,
                       child: Padding(
                         padding: EdgeInsets.only(bottom: 40),
-                        child: Text(
-                          "Pusatkan tomat di dalam kotak putih",
-                          style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500, shadows: [Shadow(blurRadius: 2, color: Colors.black)]),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              "Pusatkan tomat di dalam kotak putih",
+                              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, shadows: [Shadow(blurRadius: 2, color: Colors.black)]),
+                            ),
+                            SizedBox(height: 4),
+                            Text(
+                              "Jaga jarak HP sekitar 15 cm dari tomat", 
+                              style: TextStyle(color: Colors.white70, fontSize: 14, shadows: [Shadow(blurRadius: 2, color: Colors.black)]),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -329,8 +319,6 @@ class _ScanPageState extends State<ScanPage> with WidgetsBindingObserver {
               ),
             ),
           ),
-
-          // --- 2. AREA KONTROL ---
           Expanded(
             flex: 2,
             child: Container(
@@ -339,10 +327,8 @@ class _ScanPageState extends State<ScanPage> with WidgetsBindingObserver {
                 children: [
                   const Text("Deteksi Kematangan Tomat", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 5),
-                  const Text("Jaga jarak kamera sekitar 15 cm", style: TextStyle(color: Colors.grey, fontSize: 14)),
-                  
+                  const Text("Posisikan tomat di dalam frame agar akurat", style: TextStyle(color: Colors.grey, fontSize: 14)),
                   const Spacer(),
-
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
@@ -353,28 +339,22 @@ class _ScanPageState extends State<ScanPage> with WidgetsBindingObserver {
                         bgColor: const Color(0xFFFFEBEE),
                         onTap: _pickFromGallery,
                       ),
-                      
-                      Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: _takePicture,
-                          customBorder: const CircleBorder(),
-                          child: Container(
-                            width: 80,
-                            height: 80,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFFF3B30),
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 4),
-                              boxShadow: [
-                                BoxShadow(color: const Color(0xFFFF3B30).withOpacity(0.4), blurRadius: 15, offset: const Offset(0, 5))
-                              ],
-                            ),
-                            child: const Icon(Icons.camera, color: Colors.white, size: 35),
+                      GestureDetector(
+                        onTap: _takePicture,
+                        child: Container(
+                          width: 80,
+                          height: 80,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFF3B30),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 4),
+                            boxShadow: [
+                              BoxShadow(color: const Color(0xFFFF3B30).withOpacity(0.4), blurRadius: 15, offset: const Offset(0, 5))
+                            ],
                           ),
+                          child: const Icon(Icons.camera, color: Colors.white, size: 35),
                         ),
                       ),
-                      
                       _controlButton(
                         icon: _flashMode == FlashMode.off ? Icons.flash_off : Icons.flash_on,
                         label: _flashMode == FlashMode.off ? "Flash Off" : "Flash On",
@@ -398,7 +378,6 @@ class _ScanPageState extends State<ScanPage> with WidgetsBindingObserver {
     const double size = 30;
     const double thickness = 4;
     const Color color = Color(0xFFFF6B6B); 
-
     return Container(
       width: size,
       height: size,
@@ -420,11 +399,7 @@ class _ScanPageState extends State<ScanPage> with WidgetsBindingObserver {
   }
 
   Widget _controlButton({
-    required IconData icon, 
-    required String label, 
-    required Color color, 
-    required Color bgColor, 
-    required VoidCallback onTap
+    required IconData icon, required String label, required Color color, required Color bgColor, required VoidCallback onTap
   }) {
     return InkWell(
       onTap: onTap,
@@ -434,10 +409,7 @@ class _ScanPageState extends State<ScanPage> with WidgetsBindingObserver {
           Container(
             width: 55,
             height: 55,
-            decoration: BoxDecoration(
-              color: bgColor,
-              borderRadius: BorderRadius.circular(18),
-            ),
+            decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(18)),
             child: Icon(icon, color: color, size: 28),
           ),
           const SizedBox(height: 8),

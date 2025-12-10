@@ -3,7 +3,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
-final String SERVER_URL = "http://192.168.3.63:5000/predict"; 
+// GANTI IP INI SESUAI IP LAPTOP ANDA
+final String SERVER_URL = "http://192.168.18.74:5000/predict"; 
 
 class ApiService {
   static Future<Map<String, dynamic>> uploadImage(File imageFile) async {
@@ -34,9 +35,9 @@ class ApiService {
 
   static Color getColorFromString(String? colorName) {
     switch (colorName) {
-      case 'green': return Colors.green;
-      case 'orange': return Colors.orange;
-      case 'red': return Colors.red;
+      case 'green': return const Color(0xFF00C853);
+      case 'orange': return const Color(0xFFFFAB00);
+      case 'red': return const Color(0xFFD50000);
       case 'purple': return Colors.purple;
       default: return Colors.grey;
     }
